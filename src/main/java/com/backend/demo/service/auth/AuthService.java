@@ -75,7 +75,9 @@ public class AuthService implements IAuthService {
             String encodedPassword = passwordEncoder.encode(request.getPassword());
 
             User user = new User();
+            user.setName(request.getName());
             user.setEmail(request.getEmail());
+            user.setPhone(request.getPhone());
             user.setPassword(encodedPassword);
 
             Role roleUser = new Role("ROLE_USER");
