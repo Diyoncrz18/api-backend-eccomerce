@@ -1,17 +1,17 @@
 package com.backend.demo.controller;
 
-import com.backend.demo.model.User;
-import com.backend.demo.repository.UserRepository;
+import com.backend.demo.model.Voucher;
+import com.backend.demo.model.VoucherType;
+import com.backend.demo.repository.VoucherRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
+import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -19,44 +19,17 @@ import java.util.Map;
 @RequestMapping("${api.prefix}/vouchers")
 public class VoucherController {
 
-    private final UserRepository userRepository;
-
-    // In-memory voucher storage for demo (will use DB in production)
-    private static final List<Map<String, Object>> VOUCHERS = new ArrayList<>();
-
-    static {
-        VOUCHERS.add(Map.of(
-            "id", 1L,
-            "code", "MAISON10",
-            "discountType", "PERCENT",
-            "discountValue", 10,
-            "minOrderValue", 500000,
-            "validUntil", "2026-12-31",
-            "isActive", true
-        ));
-        VOUCHERS.add(Map.of(
-            "id", 2L,
-            "code", "WELCOME15",
-            "discountType", "PERCENT",
-            "discountValue", 15,
-            "minOrderValue", 0,
-            "validUntil", "2026-12-31",
-            "isActive", true
-        ));
-        VOUCHERS.add(Map.of(
-            "id", 3L,
-            "code", "MEMBER20",
-            "discountType", "PERCENT",
-            "discountValue", 20,
-            "minOrderValue", 1000000,
-            "validUntil", "2026-12-31",
-            "isActive", true
-        ));
-    }
+    private final VoucherRepository voucherRepository;
 
     @GetMapping
     public ResponseEntity<?> getAllVouchers() {
-        return ResponseEntity.ok(Map.of("vouchers", VOUCHERS));
+        return ResponseEntity.ok(Map.of(
+                "vouchers",
+                voucherRepository.findByIsActiveTrueOrderByValidUntilAsc()
+                        .stream()
+                        .map(this::toVoucherMap)
+                        .toList()
+        ));
     }
 
     @GetMapping("/my-vouchers")
@@ -65,93 +38,82 @@ public class VoucherController {
             return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         }
 
-        // Return available vouchers for user
-        return ResponseEntity.ok(Map.of("vouchers", VOUCHERS));
+        return getAllVouchers();
     }
 
     @PostMapping("/redeem")
-    public ResponseEntity<?> redeemVoucher(
-            @RequestBody Map<String, Object> request,
-            Authentication authentication) {
-        
+    @Transactional
+    public ResponseEntity<?> redeemVoucher(@RequestBody Map<String, Object> request, Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         }
 
-        String code = (String) request.get("code");
-        
-        // Find voucher
-        Map<String, Object> voucher = null;
-        for (Map<String, Object> v : VOUCHERS) {
-            if (v.get("code").equals(code)) {
-                voucher = v;
-                break;
-            }
-        }
-
+        String code = String.valueOf(request.getOrDefault("code", "")).trim();
+        Voucher voucher = voucherRepository.findByCodeIgnoreCase(code).orElse(null);
         if (voucher == null) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", "Invalid voucher code"
-            ));
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid voucher code"));
+        }
+        if (!isVoucherUsable(voucher)) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Voucher is not active"));
         }
 
-        if (Boolean.FALSE.equals(voucher.get("isActive"))) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", "Voucher is not active"
-            ));
-        }
+        voucher.setUsedCount((voucher.getUsedCount() != null ? voucher.getUsedCount() : 0) + 1);
+        voucherRepository.save(voucher);
 
         return ResponseEntity.ok(Map.of(
-            "success", true,
-            "message", "Voucher redeemed successfully",
-            "voucher", voucher
+                "success", true,
+                "message", "Voucher redeemed successfully",
+                "voucher", toVoucherMap(voucher)
         ));
     }
 
     @PostMapping("/validate")
-    public ResponseEntity<?> validateVoucher(
-            @RequestBody Map<String, Object> request) {
-        
-        String code = (String) request.get("code");
-        BigDecimal orderValue = new BigDecimal(request.getOrDefault("orderValue", "0").toString());
-        
-        // Find voucher
-        Map<String, Object> voucher = null;
-        for (Map<String, Object> v : VOUCHERS) {
-            if (v.get("code").equals(code)) {
-                voucher = v;
-                break;
-            }
-        }
+    public ResponseEntity<?> validateVoucher(@RequestBody Map<String, Object> request) {
+        String code = String.valueOf(request.getOrDefault("code", "")).trim();
+        BigDecimal orderValue = new BigDecimal(String.valueOf(request.getOrDefault("orderValue", "0")));
+        Voucher voucher = voucherRepository.findByCodeIgnoreCase(code).orElse(null);
 
         if (voucher == null) {
-            return ResponseEntity.ok(Map.of(
-                "valid", false,
-                "message", "Invalid voucher code"
-            ));
+            return ResponseEntity.ok(Map.of("valid", false, "message", "Invalid voucher code"));
         }
-
-        if (Boolean.FALSE.equals(voucher.get("isActive"))) {
-            return ResponseEntity.ok(Map.of(
-                "valid", false,
-                "message", "Voucher is not active"
-            ));
+        if (!isVoucherUsable(voucher)) {
+            return ResponseEntity.ok(Map.of("valid", false, "message", "Voucher is not active"));
         }
-
-        BigDecimal minOrderValue = new BigDecimal(voucher.getOrDefault("minOrderValue", "0").toString());
-        if (orderValue.compareTo(minOrderValue) < 0) {
-            return ResponseEntity.ok(Map.of(
-                "valid", false,
-                "message", "Minimum order value not met"
-            ));
+        if (orderValue.compareTo(voucher.getMinOrderValue()) < 0) {
+            return ResponseEntity.ok(Map.of("valid", false, "message", "Minimum order value not met"));
         }
 
         return ResponseEntity.ok(Map.of(
-            "valid", true,
-            "discountType", voucher.get("discountType"),
-            "discountValue", voucher.get("discountValue")
+                "valid", true,
+                "discountType", toDiscountType(voucher.getType()),
+                "discountValue", voucher.getValue()
         ));
+    }
+
+    private boolean isVoucherUsable(Voucher voucher) {
+        boolean active = Boolean.TRUE.equals(voucher.getIsActive());
+        boolean underLimit = voucher.getUsageLimit() == null || voucher.getUsedCount() == null
+                || voucher.getUsedCount() < voucher.getUsageLimit();
+        boolean notExpired = voucher.getValidUntil() == null || !voucher.getValidUntil().isBefore(LocalDate.now());
+        return active && underLimit && notExpired;
+    }
+
+    private Map<String, Object> toVoucherMap(Voucher voucher) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", voucher.getId());
+        item.put("code", voucher.getCode());
+        item.put("discountType", toDiscountType(voucher.getType()));
+        item.put("discountValue", voucher.getValue());
+        item.put("pointsCost", voucher.getPointsCost());
+        item.put("minOrderValue", voucher.getMinOrderValue());
+        item.put("validUntil", voucher.getValidUntil());
+        item.put("isActive", voucher.getIsActive());
+        item.put("usedCount", voucher.getUsedCount());
+        item.put("usageLimit", voucher.getUsageLimit());
+        return item;
+    }
+
+    private String toDiscountType(VoucherType type) {
+        return type == VoucherType.PERSEN ? "PERCENT" : "FIXED";
     }
 }
