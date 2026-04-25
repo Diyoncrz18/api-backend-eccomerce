@@ -4,6 +4,7 @@ import com.backend.demo.dto.OrderRequest;
 import com.backend.demo.dto.OrderResponse;
 import com.backend.demo.handler.GlobalExceptionHandler.EntityNotFoundException;
 import com.backend.demo.model.*;
+import com.backend.demo.repository.CartItemRepository;
 import com.backend.demo.repository.OrderRepository;
 import com.backend.demo.repository.ProductRepository;
 import com.backend.demo.repository.UserRepository;
@@ -31,6 +32,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
+    private final CartItemRepository cartItemRepository;
     
     @Override
     @Transactional
@@ -92,6 +94,7 @@ public class OrderServiceImpl implements OrderService {
                 .subtract(order.getDiscount() != null ? order.getDiscount() : BigDecimal.ZERO));
         
         Order savedOrder = orderRepository.save(order);
+        cartItemRepository.deleteByUserId(user.getId());
         log.info("Order created successfully: {}", savedOrder.getOrderNumber());
         
         return OrderResponse.from(savedOrder);

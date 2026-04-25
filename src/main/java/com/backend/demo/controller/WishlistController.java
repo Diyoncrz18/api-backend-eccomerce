@@ -1,13 +1,15 @@
 package com.backend.demo.controller;
 
 import com.backend.demo.model.User;
+import com.backend.demo.model.Product;
+import com.backend.demo.repository.ProductRepository;
 import com.backend.demo.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
 public class WishlistController {
 
     private final UserRepository userRepository;
+    private final ProductRepository productRepository;
 
     @GetMapping
     public ResponseEntity<?> getWishlist(Authentication authentication) {
@@ -26,8 +29,7 @@ public class WishlistController {
             return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         }
 
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findWithWishlistByEmail(authentication.getName()).orElse(null);
 
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
@@ -39,8 +41,12 @@ public class WishlistController {
                 item.put("id", p.getId());
                 item.put("name", p.getName());
                 item.put("price", p.getPrice());
+                item.put("salePrice", p.getSalePrice());
                 item.put("imageUrl", p.getImageUrl());
                 item.put("category", p.getCategory() != null ? p.getCategory().getName() : null);
+                item.put("rating", p.getRating());
+                item.put("stock", p.getStock());
+                item.put("isNew", p.getIsNew());
                 return item;
             }).collect(Collectors.toList())
             : List.of();
@@ -49,6 +55,7 @@ public class WishlistController {
     }
 
     @PostMapping("/{productId}")
+    @Transactional
     public ResponseEntity<?> addToWishlist(
             @PathVariable Long productId,
             Authentication authentication) {
@@ -57,14 +64,20 @@ public class WishlistController {
             return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         }
 
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findWithWishlistByEmail(authentication.getName()).orElse(null);
 
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
 
-        // Product will be added later - for now return success
+        Product product = productRepository.findById(productId).orElse(null);
+        if (product == null || !Boolean.TRUE.equals(product.getIsActive())) {
+            return ResponseEntity.status(404).body(Map.of("message", "Product not found"));
+        }
+
+        user.getWishlist().add(product);
+        userRepository.save(user);
+
         return ResponseEntity.ok(Map.of(
             "success", true,
             "message", "Product added to wishlist"
@@ -72,6 +85,7 @@ public class WishlistController {
     }
 
     @DeleteMapping("/{productId}")
+    @Transactional
     public ResponseEntity<?> removeFromWishlist(
             @PathVariable Long productId,
             Authentication authentication) {
@@ -80,12 +94,14 @@ public class WishlistController {
             return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
         }
 
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findWithWishlistByEmail(authentication.getName()).orElse(null);
 
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
+
+        user.getWishlist().removeIf(product -> product.getId().equals(productId));
+        userRepository.save(user);
 
         return ResponseEntity.ok(Map.of(
             "success", true,
@@ -102,13 +118,15 @@ public class WishlistController {
             return ResponseEntity.ok(Map.of("inWishlist", false));
         }
 
-        String email = authentication.getName();
-        User user = userRepository.findByEmail(email);
+        User user = userRepository.findWithWishlistByEmail(authentication.getName()).orElse(null);
 
         if (user == null) {
             return ResponseEntity.ok(Map.of("inWishlist", false));
         }
 
-        return ResponseEntity.ok(Map.of("inWishlist", false));
+        boolean inWishlist = user.getWishlist().stream()
+                .anyMatch(product -> product.getId().equals(productId));
+
+        return ResponseEntity.ok(Map.of("inWishlist", inWishlist));
     }
 }

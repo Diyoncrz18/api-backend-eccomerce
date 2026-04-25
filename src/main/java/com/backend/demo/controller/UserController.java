@@ -15,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,9 +46,13 @@ public class UserController {
         userInfo.put("name", user.getName());
         userInfo.put("email", user.getEmail());
         userInfo.put("phone", user.getPhone());
+        userInfo.put("avatarUrl", user.getAvatarUrl());
+        userInfo.put("gender", user.getGender());
+        userInfo.put("birthdate", user.getBirthdate());
         userInfo.put("tier", user.getTier());
         userInfo.put("points", user.getRewardPoints());
         userInfo.put("totalOrders", user.getTotalOrders());
+        userInfo.put("joinDate", user.getJoinDate());
         userInfo.put("roles", user.getRoles().stream().map(r -> r.getName()).toList());
 
         return ResponseEntity.ok(userInfo);
@@ -73,6 +78,16 @@ public class UserController {
         }
         if (request.containsKey("phone")) {
             user.setPhone(request.get("phone"));
+        }
+        if (request.containsKey("avatarUrl")) {
+            user.setAvatarUrl(request.get("avatarUrl"));
+        }
+        if (request.containsKey("gender")) {
+            user.setGender(request.get("gender"));
+        }
+        if (request.containsKey("birthdate")) {
+            String birthdate = request.get("birthdate");
+            user.setBirthdate(birthdate == null || birthdate.isBlank() ? null : LocalDate.parse(birthdate));
         }
 
         userRepository.save(user);
