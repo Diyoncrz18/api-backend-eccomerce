@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -22,6 +23,7 @@ public class AdminUserResponse {
     private UserTier tier;
     private Integer rewardPoints;
     private Integer totalOrders;
+    private BigDecimal totalSpent;
     private Boolean isActive;
     private Instant joinDate;
     private List<String> roles;
@@ -37,6 +39,7 @@ public class AdminUserResponse {
                 .tier(user.getTier())
                 .rewardPoints(user.getRewardPoints())
                 .totalOrders(user.getTotalOrders())
+                .totalSpent(user.getTotalSpent())
                 .isActive(user.getIsActive())
                 .joinDate(user.getJoinDate())
                 .roles(user.getRoles().stream().map(r -> r.getName()).toList())
