@@ -40,18 +40,24 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
         try {
             String jwt = parseJwt(request);
-            if (StringUtils.hasText(jwt) && jwtUtils.validateToken(jwt)) {
-                String username = jwtUtils.getUsernameFromToken(jwt);
-                Long userId = jwtUtils.getIdFromToken(jwt);
-                UserDetails userDetails = userDetailsService.loadUserById(userId);
-//                UserDetails userDetailsId = userDetailsService.loadUserById(userId);
-                if (!userDetails.getUsername().equals(username)) {
-                    throw new SecurityException("Token email does not match user email");
+            if (StringUtils.hasText(jwt)) {
+                if (jwtUtils.validateToken(jwt)) {
+                    String username = jwtUtils.getUsernameFromToken(jwt);
+                    Long userId = jwtUtils.getIdFromToken(jwt);
+                    UserDetails userDetails = userDetailsService.loadUserById(userId);
+                    if (!userDetails.getUsername().equals(username)) {
+                        throw new SecurityException("Token email does not match user email");
+                    }
+                    var auth = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                } else {
+                    // Token present but invalid — reject the request
+                    System.out.println("JWT Filter: invalid token provided");
+                    sendErrorResponse(response);
+                    return;
                 }
-
-                var auth = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(auth);
             }
+            // No token present — allow Spring Security to handle authorization
         } catch (Exception e) {
             System.out.println("JWT Filter error: " + e.getMessage());
             sendErrorResponse(response);

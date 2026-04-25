@@ -61,13 +61,12 @@ public class CookieUtils {
         }
     }
 
-    // Add this method to your CookieUtils class
     public void clearRefreshTokenCookie(HttpServletResponse response) {
         Cookie cookie = new Cookie("refreshToken", null);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         cookie.setPath("/");
-        cookie.setMaxAge(0); // This will delete the cookie
+        cookie.setMaxAge(0);
         response.addCookie(cookie);
     }
 }

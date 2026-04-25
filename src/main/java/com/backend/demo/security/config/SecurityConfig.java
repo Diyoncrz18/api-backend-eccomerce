@@ -2,7 +2,6 @@ package com.backend.demo.security.config;
 
 import com.backend.demo.security.jwt.AuthTokenFilter;
 import com.backend.demo.security.jwt.JwtEntryPoint;
-import com.backend.demo.security.jwt.JwtUtils;
 import com.backend.demo.security.user.UserDetailService;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -71,14 +69,25 @@ public class SecurityConfig {
         List<String> SECURED_URLS = List.of(
                 API + "/auth/logout",
                 API + "/users/**",
-                API + "/books/**"
+                API + "/dashboard/**",
+                API + "/cart/**",
+                API + "/orders/**",
+                API + "/wishlist/**",
+                API + "/admin/**",
+                API + "/chat/reindex"
         );
 
         List<String> PUBLIC_URLS = List.of(
-                API + "/auth/**",
                 API + "/auth/login",
                 API + "/auth/register",
-                API + "/auth/refresh-token"
+                API + "/auth/refresh-token",
+                API + "/products/**",
+                API + "/categories/**",
+                API + "/collections/**",
+                API + "/reviews/**",
+                API + "/vouchers/validate",
+                API + "/chat/query",
+                API + "/chat/health"
         );
 
         http.csrf(AbstractHttpConfigurer::disable)
@@ -99,15 +108,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-            "http://localhost:*", 
-            "http://127.0.0.1:*",
-            "http://192.168.*"
-        ));
+        // Allow all origins for production deployment (Vercel, Netlify, Railway, etc.)
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -120,10 +127,12 @@ public class SecurityConfig {
             @Override
             public void addCorsMappings(@NonNull CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*", "http://192.168.*")
+                        // Allow all origins for production deployment
+                        .allowedOriginPatterns("*")
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                         .allowedHeaders("*")
-                        .allowCredentials(true);
+                        .allowCredentials(true)
+                        .maxAge(3600);
             }
         };
     }

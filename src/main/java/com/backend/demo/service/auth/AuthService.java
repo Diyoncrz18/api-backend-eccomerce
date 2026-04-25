@@ -6,6 +6,7 @@ import com.backend.demo.dto.RegisterRequest;
 import com.backend.demo.dto.ResponseData;
 import com.backend.demo.model.Role;
 import com.backend.demo.model.User;
+import com.backend.demo.repository.RoleRepository;
 import com.backend.demo.repository.UserRepository;
 import com.backend.demo.security.jwt.JwtUtils;
 import com.backend.demo.security.user.UserDetailService;
@@ -45,6 +46,7 @@ public class AuthService implements IAuthService {
     private final UserDetailService userDetailsService;
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final SecurityUtils securityUtils;
 
@@ -80,7 +82,8 @@ public class AuthService implements IAuthService {
             user.setPhone(request.getPhone());
             user.setPassword(encodedPassword);
 
-            Role roleUser = new Role("ROLE_USER");
+            Role roleUser = roleRepository.findByName("ROLE_USER")
+                    .orElseGet(() -> roleRepository.save(new Role("ROLE_USER")));
             user.getRoles().add(roleUser);
 
             userRepository.save(user);
@@ -119,9 +122,6 @@ public class AuthService implements IAuthService {
             if(Objects.isNull(user)){
                 throw new UsernameNotFoundException("User not found");
             }
-
-
-            userRepository.save(user);
 
             String accessToken = jwtUtils.generateAccessTokenForUser(authentication);
             String refreshToken = jwtUtils.generateRefreshToken(request.getEmail());
