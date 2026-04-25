@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -43,28 +44,31 @@ public class ProductController {
     }
     
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request) {
         log.info("Create product: {}", request.getSku());
-        
+
         ProductResponse product = productService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(product);
     }
-    
+
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProductResponse> updateProduct(
             @PathVariable Long id,
             @Valid @RequestBody ProductRequest request) {
-        
+
         log.info("Update product: {}", id);
-        
+
         ProductResponse product = productService.update(id, request);
         return ResponseEntity.ok(product);
     }
-    
+
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
         log.info("Delete product: {}", id);
-        
+
         productService.delete(id);
         return ResponseEntity.noContent().build();
     }

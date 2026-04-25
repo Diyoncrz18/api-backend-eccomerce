@@ -73,21 +73,29 @@ public class UserController {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
 
-        if (request.containsKey("name")) {
+        if (request.containsKey("name") && request.get("name") != null && !request.get("name").isBlank()) {
             user.setName(request.get("name"));
         }
-        if (request.containsKey("phone")) {
+        if (request.containsKey("phone") && request.get("phone") != null) {
             user.setPhone(request.get("phone"));
         }
-        if (request.containsKey("avatarUrl")) {
+        if (request.containsKey("avatarUrl") && request.get("avatarUrl") != null) {
             user.setAvatarUrl(request.get("avatarUrl"));
         }
-        if (request.containsKey("gender")) {
+        if (request.containsKey("gender") && request.get("gender") != null) {
             user.setGender(request.get("gender"));
         }
-        if (request.containsKey("birthdate")) {
+        if (request.containsKey("birthdate") && request.get("birthdate") != null) {
             String birthdate = request.get("birthdate");
-            user.setBirthdate(birthdate == null || birthdate.isBlank() ? null : LocalDate.parse(birthdate));
+            if (birthdate.isBlank()) {
+                user.setBirthdate(null);
+            } else {
+                try {
+                    user.setBirthdate(LocalDate.parse(birthdate));
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Invalid birthdate format. Use YYYY-MM-DD"));
+                }
+            }
         }
 
         userRepository.save(user);

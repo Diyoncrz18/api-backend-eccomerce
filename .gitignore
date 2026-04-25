@@ -37,3 +37,4 @@ build/
 .env.local
 .env.*.local
 # .env.example boleh di-commit sebagai template
+AGENTS.MD

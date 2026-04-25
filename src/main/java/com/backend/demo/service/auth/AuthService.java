@@ -58,7 +58,7 @@ public class AuthService implements IAuthService {
     public ResponseEntity<ResponseData> register(RegisterRequest request) {
         ResponseData response = new ResponseData();
 
-        try {
+try {
             log.info("Register attempt for email={}", request.getEmail());
 
             if (!request.getPassword().equals(request.getConfirmPassword())) {

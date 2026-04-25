@@ -35,18 +35,38 @@ public class OrderController {
     }
     
     @GetMapping("/{id}")
-    public ResponseEntity<OrderResponse> getOrder(@PathVariable Long id) {
-        log.info("Getting order by id: {}", id);
-        
+    public ResponseEntity<OrderResponse> getOrder(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = getUserIdFromAuthentication(authentication);
+        log.info("Getting order by id: {} for user: {}", id, userId);
+
         OrderResponse order = orderService.getOrderById(id);
+
+        if (!order.getUser().getId().equals(userId) &&
+                !authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            log.warn("User {} attempted to access order {} belonging to another user", userId, id);
+            throw new SecurityException("You do not have permission to view this order");
+        }
+
         return ResponseEntity.ok(order);
     }
-    
+
     @GetMapping("/number/{orderNumber}")
-    public ResponseEntity<OrderResponse> getOrderByNumber(@PathVariable String orderNumber) {
-        log.info("Getting order by number: {}", orderNumber);
-        
+    public ResponseEntity<OrderResponse> getOrderByNumber(
+            @PathVariable String orderNumber,
+            Authentication authentication) {
+        Long userId = getUserIdFromAuthentication(authentication);
+        log.info("Getting order by number: {} for user: {}", orderNumber, userId);
+
         OrderResponse order = orderService.getOrderByNumber(orderNumber);
+
+        if (!order.getUser().getId().equals(userId) &&
+                !authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            log.warn("User {} attempted to access order {} belonging to another user", userId, orderNumber);
+            throw new SecurityException("You do not have permission to view this order");
+        }
+
         return ResponseEntity.ok(order);
     }
     
@@ -91,18 +111,40 @@ public class OrderController {
     @PutMapping("/{id}")
     public ResponseEntity<OrderResponse> updateOrder(
             @PathVariable Long id,
-            @Valid @RequestBody OrderRequest request) {
-        
-        log.info("Updating order: {}", id);
-        
-        OrderResponse order = orderService.updateOrder(id, request);
+            @Valid @RequestBody OrderRequest request,
+            Authentication authentication) {
+
+        Long userId = getUserIdFromAuthentication(authentication);
+        log.info("Updating order: {} by user: {}", id, userId);
+
+        OrderResponse order = orderService.getOrderById(id);
+
+        if (!order.getUser().getId().equals(userId) &&
+                !authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            log.warn("User {} attempted to update order {} belonging to another user", userId, id);
+            throw new SecurityException("You do not have permission to update this order");
+        }
+
+        order = orderService.updateOrder(id, request);
         return ResponseEntity.ok(order);
     }
-    
+
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> cancelOrder(@PathVariable Long id) {
-        log.info("Cancelling order: {}", id);
-        
+    public ResponseEntity<Void> cancelOrder(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        Long userId = getUserIdFromAuthentication(authentication);
+        log.info("Cancelling order: {} by user: {}", id, userId);
+
+        OrderResponse order = orderService.getOrderById(id);
+
+        if (!order.getUser().getId().equals(userId) &&
+                !authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            log.warn("User {} attempted to cancel order {} belonging to another user", userId, id);
+            throw new SecurityException("You do not have permission to cancel this order");
+        }
+
         orderService.cancelOrder(id);
         return ResponseEntity.noContent().build();
     }
