@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Environment Variables (JANGAN di-commit!) ###
+.env
+.env.local
+.env.*.local
+# .env.example boleh di-commit sebagai template
