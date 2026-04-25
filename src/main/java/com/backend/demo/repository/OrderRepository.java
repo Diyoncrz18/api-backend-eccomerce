@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByOrderNumber(String orderNumber);
     
     Page<Order> findByUserId(Long userId, Pageable pageable);
+
+    long countByUserId(Long userId);
+
+    long countByUserIdAndStatusIn(Long userId, Collection<OrderStatus> statuses);
     
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
     

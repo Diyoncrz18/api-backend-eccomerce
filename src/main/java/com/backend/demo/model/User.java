@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -30,6 +31,15 @@ public class User {
     
     @Column(length = 20)
     private String phone;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(length = 30)
+    private String gender;
+
+    @Column
+    private LocalDate birthdate;
     
     @Column(name = "tier", length = 20)
     @Enumerated(EnumType.STRING)
