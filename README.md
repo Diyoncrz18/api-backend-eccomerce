@@ -8,15 +8,16 @@
 
 1. [Ringkasan & Tech Stack](#1-ringkasan--tech-stack)
 2. [Quick Start](#2-quick-start)
-3. [Fitur 1 — Integrasi MySQL](#fitur-1--integrasi-mysql)
-4. [Fitur 2 — Integrasi Gemini AI](#fitur-2--integrasi-gemini-ai)
-5. [Fitur 3 — AI Recommendation Engine](#fitur-3--ai-recommendation-engine)
-6. [Fitur 4 — RAG Pipeline](#fitur-4--rag-pipeline)
-7. [Fitur 5a — Chat DB-Grounded (Produk)](#fitur-5a--chat-db-grounded-produk)
-8. [Fitur 5b — Chat Per-User Data](#fitur-5b--chat-per-user-data)
-9. [Fitur 6a — Dashboard Analytics](#fitur-6a--dashboard-analytics)
-10. [Referensi API Endpoints](#referensi-api-endpoints)
-11. [Verifikasi & Demo](#verifikasi--demo)
+3. [Skema Database (ERD)](#3-skema-database-erd)
+4. [Fitur 1 — Integrasi MySQL](#fitur-1--integrasi-mysql)
+5. [Fitur 2 — Integrasi Gemini AI](#fitur-2--integrasi-gemini-ai)
+6. [Fitur 3 — AI Recommendation Engine](#fitur-3--ai-recommendation-engine)
+7. [Fitur 4 — RAG Pipeline](#fitur-4--rag-pipeline)
+8. [Fitur 5a — Chat DB-Grounded (Produk)](#fitur-5a--chat-db-grounded-produk)
+9. [Fitur 5b — Chat Per-User Data](#fitur-5b--chat-per-user-data)
+10. [Fitur 6a — Dashboard Analytics](#fitur-6a--dashboard-analytics)
+11. [Referensi API Endpoints](#referensi-api-endpoints)
+12. [Verifikasi & Demo](#verifikasi--demo)
 
 ---
 
@@ -78,6 +79,244 @@ curl http://localhost:8081/api/v1/chat/health
 ```
 
 Default port: **8081**. API base: `http://localhost:8081/api/v1`.
+
+---
+
+## 3. Skema Database (ERD)
+
+> Database `backend_final` di MySQL 8 berisi **11 entitas + 2 join table** = total **13 tabel**.
+> Schema dibuat otomatis oleh Hibernate dari JPA annotations (`spring.jpa.hibernate.ddl-auto=update`) — tidak perlu jalankan SQL DDL manual.
+
+### Diagram Hubungan (Entity-Relationship)
+
+```mermaid
+erDiagram
+    users ||--o{ orders : "places"
+    users ||--o{ cart_items : "owns"
+    users ||--o{ reviews : "writes"
+    users }o--o{ roles : "user_roles (M:N)"
+    users }o--o{ products : "user_wishlist (M:N)"
+
+    products ||--o{ order_items : "appears_in"
+    products ||--o{ cart_items : "added_to"
+    products ||--o{ reviews : "receives"
+    products ||--o| product_embeddings : "vectorized_by (1:1)"
+    categories ||--o{ products : "classifies"
+    collections ||--o{ products : "groups"
+
+    orders ||--o{ order_items : "contains"
+
+    users {
+        bigint id PK
+        varchar(100) name
+        varchar email UK
+        varchar password "BCrypt hashed"
+        varchar(20) phone
+        varchar(500) avatar_url
+        varchar(30) gender
+        date birthdate
+        varchar(20) tier "REGULAR_GOLD_PLATINUM_ADMIN"
+        int reward_points "default 0"
+        int total_orders "default 0"
+        decimal total_spent "15,2"
+        boolean is_active "default true"
+        timestamp join_date
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    roles {
+        bigint id PK
+        varchar name "USER or ADMIN"
+    }
+
+    user_roles {
+        bigint user_id PK,FK
+        bigint role_id PK,FK
+    }
+
+    user_wishlist {
+        bigint user_id PK,FK
+        bigint product_id PK,FK
+    }
+
+    categories {
+        bigint id PK
+        varchar(200) name
+        varchar(1000) description
+        varchar(500) image_url
+        int product_count
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    collections {
+        bigint id PK
+        varchar(100) name UK
+        varchar(500) description
+        varchar image_url
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    products {
+        bigint id PK
+        varchar(50) sku UK
+        varchar(200) name
+        varchar(2000) description
+        bigint category_id FK
+        bigint collection_id FK
+        decimal price "12,2"
+        decimal sale_price "12,2 nullable"
+        int stock "default 0"
+        boolean is_active
+        boolean is_new
+        varchar image_url
+        varchar(100) material
+        varchar(100) dimensions
+        decimal weight_kg "6,2"
+        boolean assembly_required
+        int warranty_months
+        decimal rating "3,2 default 0"
+        int review_count "default 0"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    product_embeddings {
+        bigint product_id PK,FK "1:1 with products"
+        text vector_json "JSON 768-dim float array"
+        varchar(80) model "gemini-embedding-001"
+        varchar(32) source_hash "SHA-256 first 16 hex"
+        int dimensions "default 768"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    orders {
+        bigint id PK
+        varchar(50) order_number UK
+        bigint user_id FK
+        varchar(20) status "MENUNGGU_DIKEMAS_DIKIRIM_SELESAI_DIBATALKAN"
+        decimal subtotal "12,2"
+        decimal tax "12,2 default 0"
+        decimal shipping_fee "12,2 default 0"
+        decimal discount "12,2 nullable"
+        decimal total "12,2"
+        varchar(500) shipping_address
+        varchar(500) billing_address
+        varchar(1000) customer_note
+        varchar(1000) admin_note
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    order_items {
+        bigint id PK
+        bigint order_id FK
+        bigint product_id FK
+        int quantity
+        decimal unit_price "12,2"
+        decimal sale_price "12,2 nullable"
+        decimal subtotal "12,2 auto-calc"
+    }
+
+    cart_items {
+        bigint id PK
+        bigint user_id FK
+        bigint product_id FK
+        int quantity "default 1"
+        varchar(80) variant "default 'default'"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    reviews {
+        bigint id PK
+        bigint product_id FK
+        bigint user_id FK
+        int rating "1 to 5"
+        varchar(2000) comment
+        boolean is_approved "default true"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    vouchers {
+        bigint id PK
+        varchar(50) code UK "e.g. MAISON10"
+        varchar(20) type "PERSEN or NOMINAL"
+        decimal value "12,2"
+        int points_cost "reward points needed"
+        decimal min_order_value "12,2"
+        int used_count "default 0"
+        int usage_limit "default 999"
+        date valid_until
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    app_settings {
+        varchar(120) setting_key PK
+        varchar(60) setting_group
+        text setting_value
+        varchar(30) value_type "string_int_bool_json"
+        timestamp updated_at
+    }
+```
+
+> **Catatan baca diagram**
+>
+> - `||--o{` = one-to-many (parent kiri, child kanan)
+> - `||--o|` = one-to-one (opsional)
+> - `}o--o{` = many-to-many (via join table eksplisit)
+> - `PK,FK` di join table = kolom yang sekaligus jadi bagian Primary Key komposit dan Foreign Key.
+
+### Ringkasan Tabel
+
+| # | Tabel | Tipe | Kunci | Hubungan utama |
+|---|---|---|---|---|
+| 1 | `users` | Entitas inti | PK `id`, UK `email` | M:N → `roles`, M:N → `products` (wishlist), 1:N → `orders`/`cart_items`/`reviews` |
+| 2 | `roles` | Entitas otorisasi | PK `id` | M:N → `users` |
+| 3 | `user_roles` | Join table | PK (`user_id`,`role_id`) | Menjembatani `users`↔`roles` |
+| 4 | `user_wishlist` | Join table | PK (`user_id`,`product_id`) | Menjembatani `users`↔`products` |
+| 5 | `categories` | Master | PK `id` | 1:N → `products` |
+| 6 | `collections` | Master | PK `id`, UK `name` | 1:N → `products` |
+| 7 | `products` | Entitas inti | PK `id`, UK `sku` | N:1 → `categories`/`collections`, 1:1 → `product_embeddings`, 1:N → `order_items`/`cart_items`/`reviews` |
+| 8 | `product_embeddings` | RAG vektor | PK `product_id` (juga FK) | 1:1 → `products` (vektor 768-dim untuk semantic search) |
+| 9 | `orders` | Transaksi | PK `id`, UK `order_number` | N:1 → `users`, 1:N → `order_items` |
+| 10 | `order_items` | Line item | PK `id` | N:1 → `orders`/`products` |
+| 11 | `cart_items` | Sesi belanja | PK `id`, UK (`user_id`,`product_id`,`variant`) | N:1 → `users`/`products` |
+| 12 | `reviews` | Rating | PK `id`, UK (`user_id`,`product_id`) | N:1 → `users`/`products` |
+| 13 | `vouchers` | Promo | PK `id`, UK `code` | Standalone (validasi via service) |
+| 14 | `app_settings` | Config dinamis | PK `setting_key` | Standalone (key-value store) |
+
+### Aturan Integritas Penting
+
+| Constraint | Kolom | Tujuan |
+|---|---|---|
+| `UNIQUE` | `users.email` | Cegah dobel akun |
+| `UNIQUE` | `products.sku` | SKU stok 1 produk = 1 baris |
+| `UNIQUE` | `collections.name` | Nama koleksi tidak boleh kembar |
+| `UNIQUE` | `orders.order_number` | Format `MAISON-YYYYMMDD-xxxx`, tidak boleh duplikat |
+| `UNIQUE` | `vouchers.code` | Kode voucher unik |
+| `UNIQUE COMPOSITE` | `cart_items(user_id,product_id,variant)` | Satu user tidak punya 2 baris cart untuk produk+varian sama (auto increment qty) |
+| `UNIQUE COMPOSITE` | `reviews(user_id,product_id)` | Satu user hanya boleh review 1× per produk |
+| `FK CASCADE DELETE` | `order_items.order_id` | Order hilang → item-nya ikut hilang (`orphanRemoval=true`) |
+| `INDEX` | `product_embeddings.model` | Cepat filter semua row yang pakai model embedding tertentu |
+| `INDEX` | `product_embeddings.source_hash` | Deteksi cepat baris yang sumbernya berubah → re-embed |
+
+### Lifecycle Otomatis (JPA Hooks)
+
+Setiap entitas punya `@PrePersist` / `@PreUpdate` yang otomatis isi:
+
+- `created_at` saat row dibuat pertama kali.
+- `updated_at` setiap kali row diupdate.
+- `OrderItem.calculateSubtotal()` otomatis hitung `subtotal = (salePrice ?? unitPrice) × quantity` sebelum insert/update.
+- `User.joinDate` otomatis = `now()` saat register.
 
 ---
 
