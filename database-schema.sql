@@ -86,6 +86,24 @@ CREATE TABLE IF NOT EXISTS products (
     INDEX idx_products_rating (rating, review_count)
 );
 
+-- RAG vector storage for semantic product search.
+-- 1:1 with products (product_id is both PK and FK).
+-- vector_json stores ~768-dim float array as JSON text (~5.5 KB per row).
+-- source_hash = SHA-256 first 16 hex chars of the embedded text → re-embed when changed.
+-- model = embedding model id → switching models triggers full re-embed.
+CREATE TABLE IF NOT EXISTS product_embeddings (
+    product_id BIGINT PRIMARY KEY,
+    vector_json TEXT NOT NULL,
+    model VARCHAR(80) NOT NULL,
+    source_hash VARCHAR(32) NOT NULL,
+    dimensions INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_product_embeddings_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    INDEX idx_product_emb_model (model),
+    INDEX idx_product_emb_hash (source_hash)
+);
+
 CREATE TABLE IF NOT EXISTS user_wishlist (
     user_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,

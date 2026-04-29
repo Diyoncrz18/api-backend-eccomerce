@@ -84,8 +84,9 @@ Default port: **8081**. API base: `http://localhost:8081/api/v1`.
 
 ## 3. Skema Database (ERD)
 
-> Database `backend_final` di MySQL 8 berisi **11 entitas + 2 join table** = total **13 tabel**.
+> Database `backend_final` di MySQL 8 berisi **12 entitas + 2 join table** = total **14 tabel**.
 > Schema dibuat otomatis oleh Hibernate dari JPA annotations (`spring.jpa.hibernate.ddl-auto=update`) — tidak perlu jalankan SQL DDL manual.
+> File DDL referensi tersedia di [`database-schema.sql`](database-schema.sql) (untuk dokumentasi & inisialisasi manual).
 
 ### Diagram Hubungan (Entity-Relationship)
 
@@ -94,7 +95,7 @@ erDiagram
     users ||--o{ orders : "places"
     users ||--o{ cart_items : "owns"
     users ||--o{ reviews : "writes"
-    users }o--o{ roles : "user_roles (M:N)"
+    users }o--o{ role : "user_roles (M:N)"
     users }o--o{ products : "user_wishlist (M:N)"
 
     products ||--o{ order_items : "appears_in"
@@ -125,7 +126,7 @@ erDiagram
         timestamp updated_at
     }
 
-    roles {
+    role {
         bigint id PK
         varchar name "USER or ADMIN"
     }
@@ -279,9 +280,9 @@ erDiagram
 
 | # | Tabel | Tipe | Kunci | Hubungan utama |
 |---|---|---|---|---|
-| 1 | `users` | Entitas inti | PK `id`, UK `email` | M:N → `roles`, M:N → `products` (wishlist), 1:N → `orders`/`cart_items`/`reviews` |
-| 2 | `roles` | Entitas otorisasi | PK `id` | M:N → `users` |
-| 3 | `user_roles` | Join table | PK (`user_id`,`role_id`) | Menjembatani `users`↔`roles` |
+| 1 | `users` | Entitas inti | PK `id`, UK `email` | M:N → `role`, M:N → `products` (wishlist), 1:N → `orders`/`cart_items`/`reviews` |
+| 2 | `role` | Entitas otorisasi | PK `id` | M:N → `users` |
+| 3 | `user_roles` | Join table | PK (`user_id`,`role_id`) | Menjembatani `users`↔`role` |
 | 4 | `user_wishlist` | Join table | PK (`user_id`,`product_id`) | Menjembatani `users`↔`products` |
 | 5 | `categories` | Master | PK `id` | 1:N → `products` |
 | 6 | `collections` | Master | PK `id`, UK `name` | 1:N → `products` |
