@@ -29,6 +29,7 @@ public class RagService {
     private final HybridRetriever retriever;
     private final PromptBuilder promptBuilder;
     private final GeminiClient geminiClient;
+    private final UserContextProvider userContextProvider;
 
     @Value("${rag.retrieval.top-k:6}")
     private int topK;
@@ -44,6 +45,15 @@ public class RagService {
         Pattern.compile("INTENT\\s*:\\s*([a-z_]+)", Pattern.CASE_INSENSITIVE);
 
     public ChatResponse query(ChatRequest request) {
+        return query(request, null);
+    }
+
+    /**
+     * Same as {@link #query(ChatRequest)} but with the authenticated user's email.
+     * When provided, the prompt is enriched with a "DATA AKUN ANDA" block so the
+     * LLM can answer personalized questions like "berapa pesanan saya?".
+     */
+    public ChatResponse query(ChatRequest request, String authenticatedEmail) {
         String userMessage = request.getMessage();
         List<ChatMessage> history = limitHistory(request.getHistory());
 
@@ -54,14 +64,19 @@ public class RagService {
         Map<Long, Product> byId = new LinkedHashMap<>();
         for (Product p : retrieved) byId.put(p.getId(), p);
 
-        // 2. If Gemini not configured, skip LLM and build a heuristic response
+        // 2. Resolve user context (best effort — never blocks chat on failure)
+        UserContextProvider.UserContext userContext = userContextProvider
+            .buildFor(authenticatedEmail)
+            .orElse(null);
+
+        // 3. If Gemini not configured, skip LLM and build a heuristic response
         if (!geminiClient.isConfigured()) {
             log.info("Gemini not configured — using heuristic fallback");
             return heuristicResponse(userMessage, retrieved);
         }
 
-        // 3. Build prompt & call LLM
-        String prompt = promptBuilder.build(userMessage, history, retrieved);
+        // 4. Build prompt & call LLM
+        String prompt = promptBuilder.build(userMessage, history, retrieved, userContext);
 
         GeminiClient.GeminiResult llm;
         try {

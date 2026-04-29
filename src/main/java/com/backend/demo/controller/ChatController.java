@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -40,13 +42,29 @@ public class ChatController {
     private final EmbeddingBootstrap embeddingBootstrap;
 
     @PostMapping("/query")
-    public ResponseEntity<ChatResponse> query(@Valid @RequestBody ChatRequest request) {
-        log.info("Chat query received: len={}, historySize={}",
+    public ResponseEntity<ChatResponse> query(@Valid @RequestBody ChatRequest request,
+                                              Authentication authentication) {
+        String email = resolveEmail(authentication);
+        log.info("Chat query received: len={}, historySize={}, authed={}",
             request.getMessage().length(),
-            request.getHistory() == null ? 0 : request.getHistory().size());
+            request.getHistory() == null ? 0 : request.getHistory().size(),
+            email != null);
 
-        ChatResponse response = ragService.query(request);
+        ChatResponse response = ragService.query(request, email);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Returns the authenticated user's email if a valid JWT was supplied,
+     * or {@code null} for anonymous/public requests. Endpoint is permitAll,
+     * so this is a soft (optional) auth check.
+     */
+    private static String resolveEmail(Authentication auth) {
+        if (auth == null) return null;
+        if (auth instanceof AnonymousAuthenticationToken) return null;
+        if (!auth.isAuthenticated()) return null;
+        String name = auth.getName();
+        return (name == null || name.isBlank()) ? null : name;
     }
 
     /**

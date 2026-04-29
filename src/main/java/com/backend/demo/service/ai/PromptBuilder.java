@@ -2,10 +2,13 @@ package com.backend.demo.service.ai;
 
 import com.backend.demo.dto.chat.ChatMessage;
 import com.backend.demo.model.Product;
+import com.backend.demo.model.VoucherType;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.text.NumberFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 
@@ -20,15 +23,40 @@ public class PromptBuilder {
     private static final NumberFormat RP =
         NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
 
+    private static final DateTimeFormatter DATE_FMT =
+        DateTimeFormatter.ofPattern("d MMM yyyy", new Locale("id", "ID"))
+            .withZone(ZoneId.of("Asia/Jakarta"));
+
+    private static final DateTimeFormatter SHORT_DATE_FMT =
+        DateTimeFormatter.ofPattern("d MMM yyyy", new Locale("id", "ID"));
+
     /**
-     * Assemble the final prompt string.
+     * Backward-compatible build (no user context).
      */
     public String build(String userMessage,
                         List<ChatMessage> history,
                         List<Product> retrieved) {
+        return build(userMessage, history, retrieved, null);
+    }
+
+    /**
+     * Assemble the final prompt string. When {@code userContext} is non-null,
+     * the prompt also contains a "DATA AKUN ANDA" block so the LLM can answer
+     * personalized questions like "berapa pesanan saya?".
+     */
+    public String build(String userMessage,
+                        List<ChatMessage> history,
+                        List<Product> retrieved,
+                        UserContextProvider.UserContext userContext) {
 
         StringBuilder sb = new StringBuilder(4096);
-        sb.append(systemInstructions());
+        sb.append(systemInstructions(userContext != null));
+
+        if (userContext != null) {
+            sb.append("\n\n=== DATA AKUN ANDA (USER YANG SEDANG LOGIN) ===\n");
+            sb.append(formatUserContext(userContext));
+        }
+
         sb.append("\n\n=== KATALOG PRODUK YANG TERSEDIA ===\n");
         if (retrieved == null || retrieved.isEmpty()) {
             sb.append("(tidak ada produk yang cocok ditemukan)\n");
@@ -54,8 +82,24 @@ public class PromptBuilder {
 
     /**
      * System instructions — keep this tight, strict rules prevent hallucination.
+     * When the user is logged in, intent {@code account_info} is added so the
+     * LLM can answer personal questions ("berapa pesanan saya?", dsb).
      */
-    private String systemInstructions() {
+    private String systemInstructions(boolean userLoggedIn) {
+        String accountIntent = userLoggedIn ? "|account_info" : "";
+        String accountRule = userLoggedIn
+            ? """
+              8. Untuk pertanyaan tentang akun ("pesanan saya", "voucher saya", "poin saya",
+                 "cart saya", "wishlist saya"), gunakan EKSKLUSIF data dari blok DATA AKUN ANDA.
+                 Jangan mengarang nomor pesanan, voucher, atau jumlah yang tidak ada di sana.
+                 INTENT untuk pertanyaan akun: account_info dengan PRODUCT_IDS: [].
+              """
+            : """
+              8. Jika user bertanya tentang data pribadi ("pesanan saya", "voucher saya",
+                 "poin saya", dst), arahkan dengan sopan untuk login dulu agar Anda bisa membantu.
+                 INTENT: fallback, PRODUCT_IDS: [].
+              """;
+
         return """
             Anda adalah "Maison AI", asisten belanja furnitur & dekorasi untuk toko Maison Interior.
             Tugas Anda: memberikan rekomendasi produk berdasarkan pertanyaan user.
@@ -65,14 +109,72 @@ public class PromptBuilder {
             2. Gunakan Bahasa Indonesia yang hangat, singkat, dan informatif (maks 3 kalimat untuk teks utama).
             3. Sertakan harga dalam format "Rp X.XXX.XXX" bila relevan. Jika ada salePrice, gunakan harga diskon.
             4. Di akhir jawaban, WAJIB tulis dua baris marker:
-               INTENT: <greeting|product_recommendation|off_topic|fallback>
+               INTENT: <greeting|product_recommendation|off_topic|fallback%s>
                PRODUCT_IDS: [id1, id2, ...]
                - Cantumkan 1-4 ID produk paling relevan dari katalog.
-               - Kalau tidak ada rekomendasi (greeting / off-topic), tulis: PRODUCT_IDS: []
+               - Kalau tidak ada rekomendasi (greeting / off-topic / account_info), tulis: PRODUCT_IDS: []
             5. Jika user bertanya di luar topik furnitur/interior/dekorasi rumah, jawab sopan bahwa Anda khusus membantu seputar Maison.
             6. Jangan pernah menyebut "katalog", "database", atau "daftar produk" dalam jawaban — buat terasa natural.
             7. Jangan mengulangi pertanyaan user. Langsung berikan jawaban yang bernilai.
-            """;
+            %s""".formatted(accountIntent, accountRule);
+    }
+
+    /**
+     * Render the authenticated user's data as a compact text block for the prompt.
+     */
+    private String formatUserContext(UserContextProvider.UserContext c) {
+        StringBuilder sb = new StringBuilder(512);
+        sb.append("Nama: ").append(safe(c.getName())).append("\n");
+        sb.append("Tier: ").append(c.getTier())
+          .append(" | Reward Points: ").append(c.getPoints())
+          .append(" | Total Belanja: ").append(formatRp(c.getTotalSpent())).append("\n");
+
+        sb.append("\nStatistik Pesanan:\n");
+        sb.append("- Total pesanan: ").append(c.getTotalOrders()).append("\n");
+        sb.append("- Pesanan aktif (sedang diproses/dikirim): ").append(c.getActiveOrders()).append("\n");
+        sb.append("- Pesanan selesai: ").append(c.getCompletedOrders()).append("\n");
+
+        if (c.getRecentOrders() != null && !c.getRecentOrders().isEmpty()) {
+            sb.append("\n").append(Math.min(c.getRecentOrders().size(), 3)).append(" Pesanan Terbaru:\n");
+            int idx = 1;
+            for (UserContextProvider.RecentOrder o : c.getRecentOrders()) {
+                sb.append(idx++).append(". ")
+                  .append(safe(o.getOrderNumber()))
+                  .append(" | ").append(o.getStatus())
+                  .append(" | ").append(formatRp(o.getTotal()));
+                if (o.getCreatedAt() != null) {
+                    sb.append(" (").append(DATE_FMT.format(o.getCreatedAt())).append(")");
+                }
+                sb.append("\n");
+            }
+        }
+
+        sb.append("\nCart aktif: ").append(c.getCartItemCount()).append(" item\n");
+        sb.append("Wishlist: ").append(c.getWishlistCount()).append(" item\n");
+
+        if (c.getActiveVouchers() != null && !c.getActiveVouchers().isEmpty()) {
+            sb.append("\nVoucher tersedia (aktif & belum kadaluarsa):\n");
+            for (UserContextProvider.VoucherInfo v : c.getActiveVouchers()) {
+                sb.append("- ").append(v.getCode()).append(": ");
+                if (v.getType() == VoucherType.PERSEN) {
+                    sb.append("Diskon ").append(v.getValue().stripTrailingZeros().toPlainString()).append("%");
+                } else {
+                    sb.append("Diskon ").append(formatRp(v.getValue()));
+                }
+                if (v.getMinOrderValue() != null
+                        && v.getMinOrderValue().compareTo(BigDecimal.ZERO) > 0) {
+                    sb.append(" (min belanja ").append(formatRp(v.getMinOrderValue())).append(")");
+                }
+                if (v.getValidUntil() != null) {
+                    sb.append(" — berlaku sampai ").append(SHORT_DATE_FMT.format(v.getValidUntil()));
+                }
+                sb.append("\n");
+            }
+        } else {
+            sb.append("\nTidak ada voucher aktif saat ini.\n");
+        }
+
+        return sb.toString();
     }
 
     /**
